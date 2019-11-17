@@ -69,6 +69,7 @@ def sendDataToServer(res):
         return False
     else:
         if ret['code']==0:
+            print('send success')
             return True
         else:
             return False
@@ -106,31 +107,32 @@ def sendData(collectRate):
     aitem = {}
     jsls = []
     while True:
-        conn = sqlite3.connect('logSensor.db')
-        cur = conn.execute('select * from sqlite_master where type="table"')
-        if not cur.fetchone():
-            conn.execute(create_sensor_table)
-        cur = conn.cursor()
-
-        conn2 = sqlite3.connect('logId.db')
-        cur2 = conn2.execute('select * from sqlite_master where type = "table"')
-        if not cur2.fetchone():
-            conn2.execute(create_log_table)
-            value = 0
-            cur2 = conn2.execute('insert into log (idValue) values(%s)' % value)  # initialize the table with the idValue 0
-            conn2.commit()
-        cur2 = conn2.cursor()
-        cur2.execute('select idValue from log order by id desc limit 1')  # find out the last id that has been sent to the server
-        rs = cur2.fetchall()
-        for row in rs:
-            selectId = row[0]
-
         if int(time.time())-currentTime>collectRate.value:
-            currentTime = int(time.time())
+            currentTime = int(time.time())           
             if testInternet():
+                conn = sqlite3.connect('logSensor.db')
+                cur = conn.execute('select * from sqlite_master where type="table"')
+                if not cur.fetchone():
+                    conn.execute(create_sensor_table)
+                cur = conn.cursor()
+
+                conn2 = sqlite3.connect('logId.db')
+                cur2 = conn2.execute('select * from sqlite_master where type = "table"')
+                if not cur2.fetchone():
+                    conn2.execute(create_log_table)
+                    value = 0
+                    cur2 = conn2.execute('insert into log (idValue) values(%s)' % value)  # initialize the table with the idValue 0
+                    conn2.commit()
+                cur2 = conn2.cursor()
+                cur2.execute('select idValue from log order by id desc limit 1')  # find out the last id that has been sent to the server
+                rs = cur2.fetchall()
+                for row in rs:
+                    selectId = row[0]
+                print('selectId',selectId)
                 try:
                     cur.execute('select * from sensor where id>{}'.format(selectId)) #find out the rows that have not been sent to the server
                     remainingRows = len(cur.fetchall())
+                    print('remaining rows',remainingRows)
                     while remainingRows>=100:
                         cur.execute('select * from sensor where id >{} and tag = 0 limit 100'.format(selectId))
                         res = cur.fetchall()
@@ -162,19 +164,18 @@ def sendData(collectRate):
                     else:
                         selectId = selectId
                         remainingRows = remainingRows
-
                     cur.execute('update sensor set tag = 1 where id< {}'.format(selectId))
                     conn.commit()
                     cur2.execute('insert into log (idValue) values("%s")'%selectId)
                     conn2.commit()
+                    conn.close()
+                    conn2.close()
                 except Exception as e:
                     print('error in select data from db and send it to the server',e)
                 else:
                     continue
         else:
             continue
-        conn.close()
-        conn2.close()
 
 def recvConfirgurations():
     dirc={}
@@ -204,14 +205,23 @@ def readData(collectRate,currentTime):
     if not cur.fetchone():
         conn.execute(create_sensor_table)
     cur = conn.cursor()
-
-    port = 'COM5'
+    portList = getAllPorts()
+    port=''
+    for i in portList:
+        ser = serial.Serial(i,baudrate=115200,timeout=1)
+        msg = ser.read(16).decode()
+        p1 = msg.find('T')
+        p2 = msg.find('D')
+        if p2-p1>5 and msg.find('=')!=-1:
+            port=i
+    
     ser = serial.Serial(port, baudrate=115200, timeout=1)
     tag = 0
     currentTimeI = int(time.time())
     while True:
         #print('read')
-        if int(time.time() - currentTime.value > 1):
+        if int(time.time() - currentTimeI > 0.1):
+            currentTimeI = time.time()
             data = getData(ser)
             temperature = data['temperature']
             depth = data['depth']
@@ -229,11 +239,13 @@ def main():
     ot = time.time()
     while True:
         if time.time()-ot>300:
-            confirgurationInfo = recvConfirgurations()
-            rotateAngle.value = confirgurationInfo['rotateAngle']
-            rotateRate.value = confirgurationInfo['rotateRate']
-            collectRate.value = confirgurationInfo['collectRate']
-            print(confirgurationInfo)
+            print('get confirguations')
+            if testInternet():
+                confirgurationInfo = recvConfirgurations()
+                rotateAngle = confirgurationInfo['rotateAngle']
+                rotateRate = confirgurationInfo['rotateRate']
+                collectRate.value = confirgurationInfo['collectRate']
+                print(confirgurationInfo)
             ot = time.time()
 
 if __name__=="__main__":
@@ -242,39 +254,11 @@ if __name__=="__main__":
     #collectRate = 300 #the seconds that use to read and send the data
 
     collectRate = mp.Value('i',1)
-
-
     currentTime = mp.Value('i',int(time.time()))
-    #currentTimeI = int(time.time())
-    #selectId = 0
-    #connected = 0
-    #l = subprocess.getoutput('ls /dev | grep ttyUSB').split('\n')
-    conn = sqlite3.connect('logSensor.db')
-    cur = conn.execute('select * from sqlite_master where type="table"')
-    if not cur.fetchone():
-        conn.execute(create_sensor_table)
-    cur = conn.cursor()
+    
 
-    conn2 = sqlite3.connect('logId.db')
-    cur2 = conn2.execute('select * from sqlite_master where type = "table"')
-    if not cur2.fetchone():
-        conn2.execute(create_log_table)
-        value = 0
-        cur2 = conn2.execute('insert into log (idValue) values(%s)' %value) #initialize the table with the idValue 0
-    cur2 = conn2.cursor()
-
-    #portList = getAllPorts()
-    #port = portList[0]
-    port='COM5'
-    '''for i in portList:
-        ser = serial.Serial(i,baudrate=115200,timeout=1)
-        msg = ser.read(16)
-        p1 = msg.find('T')
-        p2 = msg.find('D')
-        if p2-p1>5 and msg.find('=')!=-1:
-            port=i'''
-
-    #ser = serial.Serial(port,baudrate=115200,timeout=1)
+    
+    
 
     sendProcess = mp.Process(target=sendData,args=(collectRate,))
     #sendProcess.daemon = True
