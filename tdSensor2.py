@@ -41,13 +41,11 @@ def testInternet():
     except Exception as e:
         print('error in testInternet',e)
         return False
-        #connected = 0
     else:
         return True
-        #connected = 1
 
 def insertData(conn,cur,data):
-    #cur = conn.cursor()
+
     try:
         cur.execute('insert into sensor (temperature,depth,add_time,tag) values("%s","%s","%s","%s")'%(data[0],data[1],data[2],data[3]))
     except Exception as e:
@@ -69,7 +67,6 @@ def sendDataToServer(res):
         return False
     else:
         if ret['code']==0:
-            print('send success')
             return True
         else:
             return False
@@ -108,6 +105,7 @@ def sendData(collectRate):
     jsls = []
     while True:
         if int(time.time())-currentTime>collectRate.value:
+            print('send')
             currentTime = int(time.time())           
             if testInternet():
                 conn = sqlite3.connect('logSensor.db')
@@ -189,7 +187,7 @@ def recvConfirgurations():
         rotateAg = ret['data']['rotateAngle']
         rotateR =  ret['data']['rotateRate']
         collectR = ret['data']['collectRate']
-        confirgurations = {'rotateAngle':rotateAg,'rotateRate':rotateR,'collectionRate':collectR}
+        confirgurations = {'rotateAngle':rotateAg,'rotateRate':rotateR,'collectRate':collectR}
 
     except Exception as e:
         print('error in receive info from Server:', e)
@@ -199,7 +197,7 @@ def recvConfirgurations():
 
 
 
-def readData(collectRate,currentTime):
+def readData(collectRate):
     conn = sqlite3.connect('logSensor.db')
     cur = conn.execute('select * from sqlite_master where type="table"')
     if not cur.fetchone():
@@ -219,8 +217,9 @@ def readData(collectRate,currentTime):
     tag = 0
     currentTimeI = int(time.time())
     while True:
-        #print('read')
-        if int(time.time() - currentTimeI > 0.1):
+        if int(time.time()) - currentTimeI > collectRate.value:
+            print('read')
+            print('collectRatessssss',collectRate.value)
             currentTimeI = time.time()
             data = getData(ser)
             temperature = data['temperature']
@@ -238,33 +237,38 @@ def main():
     confirgurationInfo = {}
     ot = time.time()
     while True:
-        if time.time()-ot>300:
-            print('get confirguations')
+        if time.time()-ot>20:
+            ot = time.time()
+            print('read confirguations from server')
             if testInternet():
                 confirgurationInfo = recvConfirgurations()
-                rotateAngle = confirgurationInfo['rotateAngle']
-                rotateRate = confirgurationInfo['rotateRate']
-                collectRate.value = confirgurationInfo['collectRate']
-                print(confirgurationInfo)
-            ot = time.time()
+                print('confirgurationInfo',confirgurationInfo)
+                rotateAngle.value = confirgurationInfo['rotateAngle']
+                rotateRate.value = confirgurationInfo['rotateRate']
+                collectRate.value = float(confirgurationInfo['collectRate'])
+
+            
 
 if __name__=="__main__":
-    rotateAngle = 0 #
-    rotateRate = 1 #the seconds that use to control duoji
-    #collectRate = 300 #the seconds that use to read and send the data
-
-    collectRate = mp.Value('i',1)
-    currentTime = mp.Value('i',int(time.time()))
+    collectRate = mp.Value('f',1)
+    rotateAngle = mp.Value('f',0)
+    rotateRate = mp.Value('f',1)
     
-
+    confirgurationInfo = recvConfirgurations()
+    print('confirgurationInfo',confirgurationInfo)
+    rotateAngle.value = confirgurationInfo['rotateAngle']
+    rotateRate.value = confirgurationInfo['rotateRate']
+    collectRate.value = float(confirgurationInfo['collectRate'])
     
+    print('rotateAngle',rotateAngle.value)
+    print('rotateRate',rotateRate.value)
+    print('collectRate',collectRate.value)
     
-
     sendProcess = mp.Process(target=sendData,args=(collectRate,))
     #sendProcess.daemon = True
     sendProcess.start()
 
-    readProcess = mp.Process(target=readData,args=(collectRate,currentTime))
+    readProcess = mp.Process(target=readData,args=(collectRate,))
     #readProcess.daemon = True
     readProcess.start()
 
