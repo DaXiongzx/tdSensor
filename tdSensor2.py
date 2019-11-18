@@ -337,15 +337,25 @@ def main():
             
 
 if __name__=="__main__":
-    collectRate = mp.Value('f',1)
+    collectRate = mp.Value('f',30)
     rotateAngle = mp.Value('f',0)
     rotateRate = mp.Value('f',1)
-    confirgurationInfo = recvConfirgurations()
-    print('info',confirgurationInfo)   
-    rotateAngle.value = confirgurationInfo['rotateAngle']
-    rotateRate.value = confirgurationInfo['rotateRate']
-    collectRate.value = float(confirgurationInfo['collectRate'])
-    sendRaspberryUpdateTime()
+    try:
+        confirgurationInfo = recvConfirgurations()
+        print('info',confirgurationInfo)   
+        rotateAngle.value = confirgurationInfo['rotateAngle']
+        rotateRate.value = confirgurationInfo['rotateRate']
+        collectRate.value = float(confirgurationInfo['collectRate'])
+        sendRaspberryUpdateTime()
+    except Exception as e:
+        rotateAngle.value = 0
+        rotateRate.value = 1
+        collectRate.value = 30
+        print(rotateAngle.value)
+        print(rotateRate.value)
+        print(collectRate.value)
+        print('error in receive conInfo in main',e)
+        
      
     
     sendProcess = mp.Process(target=sendData,args=(collectRate,))
