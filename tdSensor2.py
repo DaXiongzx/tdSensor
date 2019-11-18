@@ -1,4 +1,3 @@
-import pickle
 
 import serial
 import subprocess
@@ -45,7 +44,6 @@ def testInternet():
         return True
 
 def insertData(conn,cur,data):
-
     try:
         cur.execute('insert into sensor (temperature,depth,add_time,tag) values("%s","%s","%s","%s")'%(data[0],data[1],data[2],data[3]))
     except Exception as e:
@@ -56,9 +54,16 @@ def insertData(conn,cur,data):
 
 
 def sendDataToServer(res):
+    if len(res)<5:
+        print('no value')
+        return False
+    print('length:',len(res))
     stationId = 2
-    with open('stationId.txt') as f:
-        stationId = f.read()[0]
+    try:
+        with open('/home/pi/tdSensor/tdSensor/stationId.txt') as f:
+            stationId = f.read().strip()
+    except Exception as e:
+        print('error in sendDataToServer when read staionId',e)
     print('this is in method',res)
     param = {'data':res,'stationId':stationId}
     url = 'http://47.110.230.61:8082/receiveData'
@@ -81,24 +86,29 @@ def getData(ser):
     depth = ''
     dataDict = {}
     while True:
-        if ser.read(1).decode() == 'T':
-            ser.read(1)
-            while True:
-                t = ser.read(1).decode()
-                if t != 'D':
-                    temperature = temperature + t
-                else:
-                    break
-            ser.read(1)
-            while True:
-                d = ser.read(1).decode()
-                if d != '\r':
-                    depth = depth + d
-                else:
-                    ser.read(1)
-                    break
-            dataDict = {'temperature': temperature, 'depth': depth}
-            return dataDict
+        try:
+            if ser.read(1).decode() == 'T':
+                ser.read(1)
+                while True:
+                    t = ser.read(1).decode()
+                    if t != 'D':
+                        temperature = temperature + t
+                    else:
+                        break
+                ser.read(1)
+                while True:
+                    d = ser.read(1).decode()
+                    if d != '\r':
+                        depth = depth + d
+                    else:
+                        ser.read(1)
+                        break
+                dataDict = {'temperature': temperature, 'depth': depth}
+        except Exception as e:
+            print('error in read data from sensor and set the temperature=100',e)
+            dataDict = {'temperature': '100', 'depth': '100'}
+        ser.flush()
+        return dataDict
 
 
 
@@ -107,30 +117,48 @@ def sendData(collectRate):
     currentTime = int(time.time())
     aitem = {}
     jsls = []
+    sendRate = 60
     while True:
-        if int(time.time())-currentTime>collectRate.value:
-            
-            currentTime = int(time.time())           
+        if int(time.time())-currentTime>sendRate:
+            currentTime = int(time.time()) 
+            try:
+                with open('/home/pi/tdSensor/tdSensor/sendRate.txt') as f:
+                    sendRate = int(f.read().strip())
+                    print('send rate',sendRate)
+            except Exception as e:
+                sendRate = 60
+                print('error in set sendRate and set sendRate = 60',e)                      
             if testInternet():
-                conn = sqlite3.connect('logSensor.db')
-                cur = conn.execute('select * from sqlite_master where type="table"')
-                if not cur.fetchone():
-                    conn.execute(create_sensor_table)
-                cur = conn.cursor()
-
-                conn2 = sqlite3.connect('logId.db')
-                cur2 = conn2.execute('select * from sqlite_master where type = "table"')
-                if not cur2.fetchone():
-                    conn2.execute(create_log_table)
-                    value = 0
-                    cur2 = conn2.execute('insert into log (idValue) values("%s")' % value)  # initialize the table with the idValue 0
-                    conn2.commit()
-                cur2 = conn2.cursor()
-                cur2.execute('select idValue from log order by id desc limit 1')  # find out the last id that has been sent to the server
-                rs = cur2.fetchall()
-                for row in rs:
-                    selectId = row[0]
-                print('selectId',selectId)
+                try:
+                    conn = sqlite3.connect('/home/pi/tdSensor/tdSensor/logSensor.db')
+                    cur = conn.execute('select * from sqlite_master where type="table"')
+                    if not cur.fetchone():
+                        conn.execute(create_sensor_table)
+                    cur = conn.cursor()
+                except Exception as e:
+                    print('connect conn error',e)
+                
+                try:
+                    conn2 = sqlite3.connect('/home/pi/tdSensor/tdSensor/logId.db')
+                    cur2 = conn2.execute('select * from sqlite_master where type = "table"')
+                    if not cur2.fetchone():
+                        conn2.execute(create_log_table)
+                        value = 0
+                        cur2 = conn2.execute('insert into log (idValue) values("%s")' % value)  # initialize the table with the idValue 0
+                        conn2.commit()
+                    cur2 = conn2.cursor()
+                except Exception as e:
+                    print('error in connect conn2',e)
+                
+                try:
+                    cur2.execute('select idValue from log order by id desc limit 1')  # find out the last id that has been sent to the server
+                    rs = cur2.fetchall()
+                    for row in rs:
+                        selectId = row[0]
+                    print('selectId',selectId)
+                except Exception as e:
+                    print('error in read selectId',e)
+                    
                 try:
                     cur.execute('select * from sensor where id>{}'.format(selectId)) #find out the rows that have not been sent to the server
                     remainingRows = len(cur.fetchall())
@@ -163,25 +191,33 @@ def sendData(collectRate):
                         aitem['temperature'] = row[1]
                         aitem['depth'] = row[2]
                         aitem['addTime'] = row[3]
-                        
-                        print('aitem',aitem)
                         jsls.append(aitem)
                         aitem = {}
-                    jsarr = json.dumps(jsls)
-                    print('jsarr',jsarr)
+                    jsarr = json.dumps(jsls)                    
                     jsls = []
-                    #aitem = {}
-                    print('send2')
+                    
                     if sendDataToServer(jsarr):
                         selectId =selectId+remainingRows
                         remainingRows = remainingRows-remainingRows
                     else:
                         selectId = selectId
                         remainingRows = remainingRows
-                    cur.execute('update sensor set tag = 1 where id< {}'.format(selectId))
-                    conn.commit()
-                    cur2.execute('insert into log (idValue) values("%s")'%selectId)
-                    conn2.commit()
+                    try:
+                        cur.execute('update sensor set tag = 1 where id< {}'.format(selectId))
+                    except Exception as e:
+                        print(e)
+                        conn.rollback()
+                    else:
+                        conn.commit()
+                        
+                    try:
+                        cur2.execute('insert into log (idValue) values("%s")'%selectId)
+                    except Exception as e:
+                        print(e)
+                        conn2.rollback()
+                    else:
+                        conn2.commit()
+    
                     conn.close()
                     conn2.close()
                 except Exception as e:
@@ -194,8 +230,11 @@ def sendData(collectRate):
 def recvConfirgurations():
     dirc={}
     stationId = 2
-    with open('stationId.txt') as f:
-        stationId = f.read()[0]
+    try:
+        with open('/home/pi/tdSensor/tdSensor/stationId.txt') as f:
+            stationId = f.read().strip()
+    except Exception as e:
+        print('error in read stationId')
     
     param = {'stationId': stationId}
     url = 'http://47.110.230.61:8082/getConfig'
@@ -219,27 +258,35 @@ def recvConfirgurations():
 
 
 def readData(collectRate):
-    conn = sqlite3.connect('logSensor.db')
-    cur = conn.execute('select * from sqlite_master where type="table"')
-    if not cur.fetchone():
-        conn.execute(create_sensor_table)
-    cur = conn.cursor()
-    portList = getAllPorts()
-    port=''
-    for i in portList:
-        ser = serial.Serial(i,baudrate=115200,timeout=1)
-        msg = ser.read(16).decode()
-        p1 = msg.find('T')
-        p2 = msg.find('D')
-        if p2-p1>5 and msg.find('=')!=-1:
-            port=i
-    
-    ser = serial.Serial(port, baudrate=115200, timeout=1)
+    ser = ''
+    try:
+        conn = sqlite3.connect('/home/pi/tdSensor/tdSensor/logSensor.db')
+        cur = conn.execute('select * from sqlite_master where type="table"')
+        if not cur.fetchone():
+            conn.execute(create_sensor_table)
+        cur = conn.cursor()
+    except Exception as e:
+        print('error in connect conn when readData',e)
+    try:
+        portList = getAllPorts()
+        port=''
+        for i in portList:
+            ser = serial.Serial(i,baudrate=115200,timeout=1)
+            msg = ser.read(16).decode()
+            p1 = msg.find('T')
+            p2 = msg.find('D')
+            if p2-p1>5 and msg.find('=')!=-1:
+                port=i
+    except Exception as e:
+        print('error in get ports',e)        
+    try:
+        ser = serial.Serial(port, baudrate=115200, timeout=1)
+    except Exception as e:
+        print('error in get ser',e)
     tag = 0
     currentTimeI = int(time.time())
     while True:
         if int(time.time()) - currentTimeI > collectRate.value:
-            
             currentTimeI = time.time()
             data = getData(ser)
             while len(data['temperature'])==0 or len(data['depth'])==0:
@@ -256,8 +303,11 @@ def readData(collectRate):
 def sendRaspberryUpdateTime():
     stationId = 2
     updateTime=time.strftime("%Y-%m-%d %H:%M:%S",time.localtime())
-    with open('stationId.txt') as f:
-        stationId = f.read()[0]
+    try:
+        with open('/home/pi/tdSensor/tdSensor/stationId.txt') as f:
+            stationId = f.read().strip()
+    except Exception as e:
+        print('error in receive Id in updateTime',e)
     param = {'stationId': stationId,'time':updateTime}
     url = 'http://47.110.230.61:8082/raspberryUpdateTime'
     try:
@@ -282,7 +332,6 @@ def main():
                 rotateAngle.value = confirgurationInfo['rotateAngle']
                 rotateRate.value = confirgurationInfo['rotateRate']
                 collectRate.value = float(confirgurationInfo['collectRate'])
-                print('update to server',confirgurationInfo)
                 sendRaspberryUpdateTime()
 
             
