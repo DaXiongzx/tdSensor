@@ -56,7 +56,11 @@ def insertData(conn,cur,data):
 
 
 def sendDataToServer(res):
-    param = {'data':res,'stationId':1}
+    stationId = 2
+    with open('stationId.txt') as f:
+        stationId = f.read()[0]
+    print('this is in method',res)
+    param = {'data':res,'stationId':stationId}
     url = 'http://47.110.230.61:8082/receiveData'
     try:
         r = requests.post(url,params=param,timeout=1)
@@ -93,8 +97,8 @@ def getData(ser):
                 else:
                     ser.read(1)
                     break
-        dataDict = {'temperature': temperature, 'depth': depth}
-        return dataDict
+            dataDict = {'temperature': temperature, 'depth': depth}
+            return dataDict
 
 
 
@@ -105,7 +109,7 @@ def sendData(collectRate):
     jsls = []
     while True:
         if int(time.time())-currentTime>collectRate.value:
-            print('send')
+            
             currentTime = int(time.time())           
             if testInternet():
                 conn = sqlite3.connect('logSensor.db')
@@ -119,7 +123,7 @@ def sendData(collectRate):
                 if not cur2.fetchone():
                     conn2.execute(create_log_table)
                     value = 0
-                    cur2 = conn2.execute('insert into log (idValue) values(%s)' % value)  # initialize the table with the idValue 0
+                    cur2 = conn2.execute('insert into log (idValue) values("%s")' % value)  # initialize the table with the idValue 0
                     conn2.commit()
                 cur2 = conn2.cursor()
                 cur2.execute('select idValue from log order by id desc limit 1')  # find out the last id that has been sent to the server
@@ -130,16 +134,21 @@ def sendData(collectRate):
                 try:
                     cur.execute('select * from sensor where id>{}'.format(selectId)) #find out the rows that have not been sent to the server
                     remainingRows = len(cur.fetchall())
-                    print('remaining rows',remainingRows)
+                    print('remaing rows',remainingRows)
                     while remainingRows>=100:
+                        print('send1')
                         cur.execute('select * from sensor where id >{} and tag = 0 limit 100'.format(selectId))
                         res = cur.fetchall()
                         for row in res:
                             aitem['temperature'] = row[1]
                             aitem['depth'] = row[2]
                             aitem['addTime'] = row[3]
+                            
                             jsls.append(aitem)
+                            aitem = {}
                         jsarr = json.dumps(jsls)
+                        jsls = []
+                        
 
                         if sendDataToServer(jsarr):  #send data to the server
                             selectId = selectId+100
@@ -154,8 +163,15 @@ def sendData(collectRate):
                         aitem['temperature'] = row[1]
                         aitem['depth'] = row[2]
                         aitem['addTime'] = row[3]
+                        
+                        print('aitem',aitem)
                         jsls.append(aitem)
+                        aitem = {}
                     jsarr = json.dumps(jsls)
+                    print('jsarr',jsarr)
+                    jsls = []
+                    #aitem = {}
+                    print('send2')
                     if sendDataToServer(jsarr):
                         selectId =selectId+remainingRows
                         remainingRows = remainingRows-remainingRows
@@ -177,10 +193,14 @@ def sendData(collectRate):
 
 def recvConfirgurations():
     dirc={}
-    param = {'stationId': 1}
+    stationId = 2
+    with open('stationId.txt') as f:
+        stationId = f.read()[0]
+    
+    param = {'stationId': stationId}
     url = 'http://47.110.230.61:8082/getConfig'
     try:
-        r = requests.get(url, params=param, timeout=1)
+        r = requests.post(url, params=param, timeout=1)
         r.raise_for_status()
         ret = json.loads(r.text)
         data = ret['data']['rotateAngle']
@@ -188,10 +208,11 @@ def recvConfirgurations():
         rotateR =  ret['data']['rotateRate']
         collectR = ret['data']['collectRate']
         confirgurations = {'rotateAngle':rotateAg,'rotateRate':rotateR,'collectRate':collectR}
-
+        
     except Exception as e:
         print('error in receive info from Server:', e)
     else:
+        
         return confirgurations
 
 
@@ -218,16 +239,33 @@ def readData(collectRate):
     currentTimeI = int(time.time())
     while True:
         if int(time.time()) - currentTimeI > collectRate.value:
-            print('read')
-            print('collectRatessssss',collectRate.value)
+            
             currentTimeI = time.time()
             data = getData(ser)
+            while len(data['temperature'])==0 or len(data['depth'])==0:
+                data = getData(ser)
             temperature = data['temperature']
             depth = data['depth']
             addTime=time.strftime("%Y-%m-%d %H:%M:%S",time.localtime())
-            print(addTime)
+            
             L = [ temperature, depth, addTime, tag]
+            print('this is the data insert to db',L)
             insertData(conn, cur, L)
+            
+            
+def sendRaspberryUpdateTime():
+    stationId = 2
+    updateTime=time.strftime("%Y-%m-%d %H:%M:%S",time.localtime())
+    with open('stationId.txt') as f:
+        stationId = f.read()[0]
+    param = {'stationId': stationId,'time':updateTime}
+    url = 'http://47.110.230.61:8082/raspberryUpdateTime'
+    try:
+        r = requests.post(url, params=param, timeout=1)
+        r.raise_for_status()
+    except Exception as e:
+        print('error in send updateInfo to Server:', e)
+    
 
 def main():
     print('enter main')
@@ -239,13 +277,13 @@ def main():
     while True:
         if time.time()-ot>20:
             ot = time.time()
-            print('read confirguations from server')
             if testInternet():
                 confirgurationInfo = recvConfirgurations()
-                print('confirgurationInfo',confirgurationInfo)
                 rotateAngle.value = confirgurationInfo['rotateAngle']
                 rotateRate.value = confirgurationInfo['rotateRate']
                 collectRate.value = float(confirgurationInfo['collectRate'])
+                print('update to server',confirgurationInfo)
+                sendRaspberryUpdateTime()
 
             
 
@@ -253,16 +291,13 @@ if __name__=="__main__":
     collectRate = mp.Value('f',1)
     rotateAngle = mp.Value('f',0)
     rotateRate = mp.Value('f',1)
-    
     confirgurationInfo = recvConfirgurations()
-    print('confirgurationInfo',confirgurationInfo)
+    print('info',confirgurationInfo)   
     rotateAngle.value = confirgurationInfo['rotateAngle']
     rotateRate.value = confirgurationInfo['rotateRate']
     collectRate.value = float(confirgurationInfo['collectRate'])
-    
-    print('rotateAngle',rotateAngle.value)
-    print('rotateRate',rotateRate.value)
-    print('collectRate',collectRate.value)
+    sendRaspberryUpdateTime()
+     
     
     sendProcess = mp.Process(target=sendData,args=(collectRate,))
     #sendProcess.daemon = True
