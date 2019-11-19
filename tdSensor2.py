@@ -112,21 +112,21 @@ def getData(ser):
 
 
 
-def sendData(collectRate):
+def sendData(sendRate):
     selectId = 0
     currentTime = int(time.time())
     aitem = {}
     jsls = []
-    sendRate = 60
+    sendRate.value = 60
     while True:
-        if int(time.time())-currentTime>sendRate:
+        if int(time.time())-currentTime>sendRate.value:
             currentTime = int(time.time()) 
             try:
                 with open('/home/pi/tdSensor/tdSensor/sendRate.txt') as f:
-                    sendRate = int(f.read().strip())
+                    sendRate.value = int(f.read().strip())
                     print('send rate',sendRate)
             except Exception as e:
-                sendRate = 60
+                sendRate.value = 60
                 print('error in set sendRate and set sendRate = 60',e)                      
             if testInternet():
                 try:
@@ -228,6 +228,7 @@ def sendData(collectRate):
             continue
 
 def recvConfirgurations():
+    confirgurations = {}
     dirc={}
     stationId = 2
     try:
@@ -249,6 +250,7 @@ def recvConfirgurations():
         confirgurations = {'rotateAngle':rotateAg,'rotateRate':rotateR,'collectRate':collectR}
         
     except Exception as e:
+        confirgurations = {'rotateAngle': 0, 'rotateRate': 1, 'collectRate': 30}
         print('error in receive info from Server:', e)
     else:
         
@@ -315,7 +317,26 @@ def sendRaspberryUpdateTime():
         r.raise_for_status()
     except Exception as e:
         print('error in send updateInfo to Server:', e)
-    
+
+def receiveInfoFromTxt():
+    try:
+        with open ('/home/pi/tdSensor/tdSensor/Confirguration.txt') as f:
+            jsInfo = f.read()
+            InfoDict = json.loads(jsInfo)
+    except Exception as e:
+        InfoDict = {'collectRate': 30, 'rotateAngle': 0, 'rotateRate': 1}
+        pritn('error in receive ConfigInfo from txt',e)
+    else:
+        return InfoDict
+
+def writeInfoToTxt(InfoDict):
+    try:
+        with open('/home/pi/tdSensor/tdSensor/Confirguration.txt','w') as f:
+            jsInfo = json.dumps(InfoDict)
+            f.write(jsInfo)
+    except Exception as e:
+        print('error in write configInfo to txt',e)
+
 
 def main():
     print('enter main')
@@ -329,6 +350,8 @@ def main():
             ot = time.time()
             if testInternet():
                 confirgurationInfo = recvConfirgurations()
+                writeInfoToTxt(confirgurationInfo)
+                confirgurationInfo = receiveInfoFromTxt()
                 rotateAngle.value = confirgurationInfo['rotateAngle']
                 rotateRate.value = confirgurationInfo['rotateRate']
                 collectRate.value = float(confirgurationInfo['collectRate'])
@@ -340,8 +363,9 @@ if __name__=="__main__":
     collectRate = mp.Value('f',30)
     rotateAngle = mp.Value('f',0)
     rotateRate = mp.Value('f',1)
+    sendRate = mp.Value('f',60)
     try:
-        confirgurationInfo = recvConfirgurations()
+        confirgurationInfo = receiveInfoFromTxt()
         print('info',confirgurationInfo)   
         rotateAngle.value = confirgurationInfo['rotateAngle']
         rotateRate.value = confirgurationInfo['rotateRate']
@@ -351,14 +375,11 @@ if __name__=="__main__":
         rotateAngle.value = 0
         rotateRate.value = 1
         collectRate.value = 30
-        print(rotateAngle.value)
-        print(rotateRate.value)
-        print(collectRate.value)
         print('error in receive conInfo in main',e)
         
      
     
-    sendProcess = mp.Process(target=sendData,args=(collectRate,))
+    sendProcess = mp.Process(target=sendData,args=(sendRate,))
     #sendProcess.daemon = True
     sendProcess.start()
 
