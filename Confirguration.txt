@@ -1,0 +1,1 @@
+{"rotateAngle": 60.0, "rotateRate": 25.0, "collectRate": "60.0"}

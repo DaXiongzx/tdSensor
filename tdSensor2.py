@@ -6,7 +6,7 @@ import sqlite3
 import multiprocessing as mp
 import socket
 import time
-#import duoji
+import duoji
 import json
 
 create_sensor_table = '''create table sensor(
@@ -124,7 +124,7 @@ def sendData(sendRate):
             try:
                 with open('/home/pi/tdSensor/tdSensor/sendRate.txt') as f:
                     sendRate.value = int(f.read().strip())
-                    print('send rate',sendRate)
+                    print('send rate',sendRate.value)
             except Exception as e:
                 sendRate.value = 60
                 print('error in set sendRate and set sendRate = 60',e)                      
@@ -377,7 +377,7 @@ if __name__=="__main__":
         collectRate.value = 30
         print('error in receive conInfo in main',e)
         
-     
+    print(rotateAngle.value,rotateRate.value,collectRate.value)
     
     sendProcess = mp.Process(target=sendData,args=(sendRate,))
     #sendProcess.daemon = True
@@ -387,8 +387,8 @@ if __name__=="__main__":
     #readProcess.daemon = True
     readProcess.start()
 
-    '''duojiProcess = mp.process(target=duoji.setDirection,args=(rotateAngle,rotateRate))
-    duojiProcess.daemon = True
-    duojiProcess.start()'''
+    duojiProcess = mp.Process(target=duoji.setDirection,args=(rotateAngle,rotateRate))
+    #duojiProcess.daemon = True
+    duojiProcess.start()
 
     main()
