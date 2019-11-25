@@ -340,7 +340,7 @@ def writeInfoToTxt(InfoDict):
 
 
 def main():
-    print('enter main')
+#    print('enter main')
     global rotateAngle
     global rotateRate
     global collectRate
@@ -351,7 +351,7 @@ def main():
             ot = time.time()
             if testInternet():
                 confirgurationInfo = recvConfirgurations()
-                print('confirguration',confirgurationInfo)
+#                print('confirguration',confirgurationInfo)
                 writeInfoToTxt(confirgurationInfo)
                 confirgurationInfo = receiveInfoFromTxt()
                 try:
@@ -373,7 +373,7 @@ if __name__=="__main__":
     sendRate = mp.Value('f',60)
     try:
         confirgurationInfo = receiveInfoFromTxt()
-        print('info',confirgurationInfo)   
+#        print('info',confirgurationInfo)   
         rotateAngle.value = confirgurationInfo['rotateAngle']
         rotateRate.value = confirgurationInfo['rotateRate']
         collectRate.value = float(confirgurationInfo['collectRate'])
@@ -383,8 +383,8 @@ if __name__=="__main__":
         rotateRate.value = 1
         collectRate.value = 30
         print('error in receive conInfo in main',e)
-    print('conf:')
-    print(rotateAngle.value,rotateRate.value,collectRate.value)
+#    print('conf:')
+#    print(rotateAngle.value,rotateRate.value,collectRate.value)
     
     sendProcess = mp.Process(target=sendData,args=(sendRate,))
     sendProcess.daemon = True

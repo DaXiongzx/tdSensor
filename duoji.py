@@ -39,7 +39,7 @@ def setDirection(rotateAngle,rotateRate):
             direction = direction - rotateAngle.value
             if direction<=0:
 #                time.sleep(rotateRate.value)
-                pwm.ChangeDutyCycle(zero_dutyCycle)
+#                pwm.ChangeDutyCycle(zero_dutyCycle)
                 reverse = 0
                 
         
