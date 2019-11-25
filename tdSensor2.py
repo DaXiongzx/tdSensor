@@ -243,6 +243,7 @@ def recvConfirgurations():
         r = requests.post(url, params=param, timeout=1)
         r.raise_for_status()
         ret = json.loads(r.text)
+        print('ret',ret)
         data = ret['data']['rotateAngle']
         rotateAg = ret['data']['rotateAngle']
         rotateR =  ret['data']['rotateRate']
@@ -325,7 +326,7 @@ def receiveInfoFromTxt():
             InfoDict = json.loads(jsInfo)
     except Exception as e:
         InfoDict = {'collectRate': 30, 'rotateAngle': 0, 'rotateRate': 1}
-        pritn('error in receive ConfigInfo from txt',e)
+        print('error in receive ConfigInfo from txt',e)
     else:
         return InfoDict
 
@@ -346,10 +347,11 @@ def main():
     confirgurationInfo = {}
     ot = time.time()
     while True:
-        if time.time()-ot>20:
+        if time.time()-ot>10:
             ot = time.time()
             if testInternet():
                 confirgurationInfo = recvConfirgurations()
+                print('confirguration',confirgurationInfo)
                 writeInfoToTxt(confirgurationInfo)
                 confirgurationInfo = receiveInfoFromTxt()
                 rotateAngle.value = confirgurationInfo['rotateAngle']
@@ -380,15 +382,15 @@ if __name__=="__main__":
     print(rotateAngle.value,rotateRate.value,collectRate.value)
     
     sendProcess = mp.Process(target=sendData,args=(sendRate,))
-    #sendProcess.daemon = True
+    sendProcess.daemon = True
     sendProcess.start()
 
     readProcess = mp.Process(target=readData,args=(collectRate,))
-    #readProcess.daemon = True
+    readProcess.daemon = True
     readProcess.start()
 
     duojiProcess = mp.Process(target=duoji.setDirection,args=(rotateAngle,rotateRate))
-    #duojiProcess.daemon = True
+    duojiProcess.daemon = True
     duojiProcess.start()
 
     main()

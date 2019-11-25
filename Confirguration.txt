@@ -1,1 +1,1 @@
-{"rotateAngle": 60.0, "rotateRate": 25.0, "collectRate": "60.0"}
+{"rotateAngle": 30.0, "rotateRate": 9.0, "collectRate": "30.0"}
