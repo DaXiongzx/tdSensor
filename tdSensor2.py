@@ -55,16 +55,16 @@ def insertData(conn,cur,data):
 
 def sendDataToServer(res):
     if len(res)<5:
-        print('no value')
+#        print('no value')
         return False
-    print('length:',len(res))
+#    print('length:',len(res))
     stationId = 2
     try:
         with open('/home/pi/tdSensor/tdSensor/stationId.txt') as f:
             stationId = f.read().strip()
     except Exception as e:
         print('error in sendDataToServer when read staionId',e)
-    print('this is in method',res)
+#    print('this is in method',res)
     param = {'data':res,'stationId':stationId}
     url = 'http://47.110.230.61:8082/receiveData'
     try:
@@ -124,7 +124,7 @@ def sendData(sendRate):
             try:
                 with open('/home/pi/tdSensor/tdSensor/sendRate.txt') as f:
                     sendRate.value = int(f.read().strip())
-                    print('send rate',sendRate.value)
+#                    print('send rate',sendRate.value)
             except Exception as e:
                 sendRate.value = 60
                 print('error in set sendRate and set sendRate = 60',e)                      
@@ -155,16 +155,16 @@ def sendData(sendRate):
                     rs = cur2.fetchall()
                     for row in rs:
                         selectId = row[0]
-                    print('selectId',selectId)
+#                    print('selectId',selectId)
                 except Exception as e:
                     print('error in read selectId',e)
                     
                 try:
                     cur.execute('select * from sensor where id>{}'.format(selectId)) #find out the rows that have not been sent to the server
                     remainingRows = len(cur.fetchall())
-                    print('remaing rows',remainingRows)
+#                    print('remaing rows',remainingRows)
                     while remainingRows>=100:
-                        print('send1')
+#                        print('send1')
                         cur.execute('select * from sensor where id >{} and tag = 0 limit 100'.format(selectId))
                         res = cur.fetchall()
                         for row in res:
@@ -243,7 +243,7 @@ def recvConfirgurations():
         r = requests.post(url, params=param, timeout=1)
         r.raise_for_status()
         ret = json.loads(r.text)
-        print('ret',ret)
+#        print('ret',ret)
         data = ret['data']['rotateAngle']
         rotateAg = ret['data']['rotateAngle']
         rotateR =  ret['data']['rotateRate']
@@ -299,7 +299,7 @@ def readData(collectRate):
             addTime=time.strftime("%Y-%m-%d %H:%M:%S",time.localtime())
             
             L = [ temperature, depth, addTime, tag]
-            print('this is the data insert to db',L)
+#            print('this is the data insert to db',L)
             insertData(conn, cur, L)
             
             
@@ -354,9 +354,14 @@ def main():
                 print('confirguration',confirgurationInfo)
                 writeInfoToTxt(confirgurationInfo)
                 confirgurationInfo = receiveInfoFromTxt()
-                rotateAngle.value = confirgurationInfo['rotateAngle']
-                rotateRate.value = confirgurationInfo['rotateRate']
-                collectRate.value = float(confirgurationInfo['collectRate'])
+                try:
+                    rotateAngle.value = confirgurationInfo['rotateAngle']
+                    rotateRate.value = confirgurationInfo['rotateRate']
+                    collectRate.value = float(confirgurationInfo['collectRate'])
+                except Exception as e:
+                    rotateAngle.value=60
+                    rotateRate.value=10
+                    collectRate.value=60
                 sendRaspberryUpdateTime()
 
             
@@ -378,7 +383,7 @@ if __name__=="__main__":
         rotateRate.value = 1
         collectRate.value = 30
         print('error in receive conInfo in main',e)
-        
+    print('conf:')
     print(rotateAngle.value,rotateRate.value,collectRate.value)
     
     sendProcess = mp.Process(target=sendData,args=(sendRate,))

@@ -17,27 +17,27 @@ def setDirection(rotateAngle,rotateRate):
     direction = 0
     reverse = 0
     while True:
-        print('direction',direction)
-        print('rotateRate',rotateRate.value)
+#        print('direction',direction)
+#        print('rotateRate',rotateRate.value)
         if reverse==0:
             duty = delta/360 * direction + zero_dutyCycle
-            print(duty)
-            print(reverse)
+#            print(duty)
+#            print(reverse)
             pwm.ChangeDutyCycle(duty)
             os.system('gpio pwm {} {}'.format(P_SERVO,round((right_dutyCycle-zero_dutyCycle)/360*direction+zero_dutyCycle)*9600/100))
             direction = direction+rotateAngle.value
-            if direction==360:
+            if direction>=360:
 #                time.sleep(rotateRate.value)
-                pwm.ChangeDutyCycle(delta/360*direction+zero_dutyCycle)
+                pwm.ChangeDutyCycle(right_dutyCycle)
                 reverse = 1
         if reverse==1:
             duty = delta/360 * direction + zero_dutyCycle
-            print(duty)
-            print(reverse)
+#            print(duty)
+#            print(reverse)
             pwm.ChangeDutyCycle(duty)
             os.system('gpio pwm {} {}'.format(P_SERVO,round((right_dutyCycle-zero_dutyCycle)/360*direction+zero_dutyCycle)*9600/100))
             direction = direction - rotateAngle.value
-            if direction==0:
+            if direction<=0:
 #                time.sleep(rotateRate.value)
                 pwm.ChangeDutyCycle(zero_dutyCycle)
                 reverse = 0
