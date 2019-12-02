@@ -340,16 +340,23 @@ def writeInfoToTxt(InfoDict):
         print('error in write configInfo to txt',e)
 
 def takePicture(rotateRate):
+    ot = time.time()
     while True:
-        now = time.strftime("%m-%d-%H:%M:%S",time.localtime())
-        print("this is {}".format(now))
-        os.system('fswebcam -d/dev/video0 -r 320*240 /home/pi/Desktop/Picture/{}.jpg'.format(now))
-        time.sleep(rotateRate.value)
+        if time.time()-ot>rotateRate.value:
+            ot = time.time()
+            time.sleep(2)
+            now = time.strftime("%m-%d-%H:%M:%S",time.localtime())
+            #print("this is {}".format(now))
+            try:
+                os.system('fswebcam -d/dev/video0 -r 320*240 /home/pi/Desktop/Picture/{}.jpg'.format(now))
+            except Exception as e:
+                print('error in take picture',e)
+        
         
 
 def udpListener(udpFlag):
     s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-    s.bind(('127.0.0.1',9999))
+    s.bind(('0.0.0.0',9999))
     print('bind on 9999')
     while True:
         direction,addr = s.recvfrom(1024)
@@ -365,7 +372,7 @@ def udpListener(udpFlag):
             
 def changeCamera():
     s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-    s.bind(('127.0.0.1',8888))
+    s.bind(('0.0.0.0',8888))
     print('bind on 8888')
     while True:
         chdirection,addr = s.recvfrom(1024)
@@ -385,6 +392,22 @@ def main():
         if time.time()-ot>10:
             ot = time.time()
             if testInternet():
+                try:
+                    ipaddress = get_host_ip()
+                except Exception as e:
+                    ipaddress='127.0.0.1'
+                try:
+                    with open('/home/pi/Desktop/stationId.txt') as f:
+                        stationId = f.read().strip()
+                except Exception as e:
+                    print('error in read stationid',e)
+                    stationId = 2
+                param = {'stationId': stationId,'ip':ipaddress}
+                url = 'http://47.110.230.61:8082/updateIp'
+                try:
+                    r = requests.post(url,params=param,timeout=1) 
+                except Exception as e:
+                    print('error in send ip to Server',e)
                 confirgurationInfo = recvConfirgurations()
 #                print('confirguration',confirgurationInfo)
                 writeInfoToTxt(confirgurationInfo)
