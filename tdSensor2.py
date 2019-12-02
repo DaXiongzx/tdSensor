@@ -361,6 +361,7 @@ def udpListener(udpFlag):
     while True:
         direction,addr = s.recvfrom(1024)
         changeDirectionstr = direction.decode()
+        print('command to duoji',changeDirectionstr)
         if changeDirectionstr.find('?stopUdp')==0:
             udpFlag.value=0
         else:
@@ -377,6 +378,7 @@ def changeCamera():
     while True:
         chdirection,addr = s.recvfrom(1024)
         changeDirectionstr = chdirection.decode()
+        print('changeDirectionstr',changeDirectionstr)
         if changeDirectionstr.find('?'):
             directionValue=float(changeDirectionstr[2:])
             camera.changeDirection(directionValue)
