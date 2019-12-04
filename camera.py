@@ -3,9 +3,13 @@ import time
 import os
 
 def changeDirection(directionValue):
+    global cpwm
+    global cdelta
+    global czero_dutyCycle
     direction = 0
     direction = directionValue
-    changeDuty = cdelta/180 * directionValue + czero_dutyCycle
+    changeDuty = cdelta/180 * direction + czero_dutyCycle
+    print('duty',changeDuty)
     cpwm.ChangeDutyCycle(changeDuty)
 
 cP_SERVO = 11
@@ -20,5 +24,5 @@ GPIO.setup(cP_SERVO, GPIO.OUT)
 GPIO.setwarnings(False)
 cpwm = GPIO.PWM(cP_SERVO, cfPWM)
 cpwm.start(czero_dutyCycle)
-time.sleep(2)
-changeDirection(180)
+#time.sleep(2)
+changeDirection(120)

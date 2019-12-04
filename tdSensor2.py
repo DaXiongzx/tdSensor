@@ -1,3 +1,4 @@
+import RPi.GPIO as GPIO
 import os
 import serial
 import subprocess
@@ -6,9 +7,10 @@ import sqlite3
 import multiprocessing as mp
 import socket
 import time
-import duoji
+#import duoji
+#from duoji import duoji
 import json
-import camera
+#import camera
 
 create_sensor_table = '''create table sensor(
                             id integer primary key autoincrement,
@@ -352,9 +354,53 @@ def takePicture(rotateRate):
             except Exception as e:
                 print('error in take picture',e)
         
-        
 
-def udpListener(udpFlag):
+def setDirection(rotateAngle,rotateRate):
+    direction = 0
+    zero_dutyCycle = 2.5#*0.64
+    middle_dutyCycle = 7.5#*0.64
+    right_dutyCycle = 12.5#*0.64
+    delta = right_dutyCycle - zero_dutyCycle
+    duty = delta/360 * direction + zero_dutyCycle
+    P_SERVO = 7
+    fPWM = 50
+    #pwm.stop()
+    GPIO.cleanup()
+    GPIO.setmode(GPIO.BOARD)
+    GPIO.setwarnings(False)
+    GPIO.setup(P_SERVO, GPIO.OUT)
+    pwm = GPIO.PWM(P_SERVO, fPWM)
+    pwm.start(zero_dutyCycle)
+    
+    print('pwm in method',pwm)
+    #pwm.ChangeDutyCycle(duty)
+    time.sleep(rotateRate.value)
+    while True:
+        if direction==360:
+            continue
+        direction = direction+rotateAngle.value
+        print('direction',direction)
+        duty = delta/360 * direction + zero_dutyCycle
+        pwm.ChangeDutyCycle(duty)
+        #direction = direction+rotateAngle.value
+        if direction>=360:
+            direction=360           
+        time.sleep(rotateRate.value)
+
+def udpListener(rotateAngle,rotateRate):
+    duojiProcess=None
+    zero_dutyCycle = 2.5#*0.64
+    middle_dutyCycle = 7.5#*0.64
+    right_dutyCycle = 12.5#*0.64
+    delta = right_dutyCycle - zero_dutyCycle
+    P_SERVO = 7
+    fPWM = 50
+    GPIO.setmode(GPIO.BOARD)
+    GPIO.setwarnings(False)
+    GPIO.setup(P_SERVO, GPIO.OUT)
+    pwm = GPIO.PWM(P_SERVO, fPWM)
+    print('initial pwm',pwm)
+    pwm.start(middle_dutyCycle)
     s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
     s.bind(('0.0.0.0',9999))
     print('bind on 9999')
@@ -362,28 +408,63 @@ def udpListener(udpFlag):
         direction,addr = s.recvfrom(1024)
         changeDirectionstr = direction.decode()
         print('command to duoji',changeDirectionstr)
+        
         if changeDirectionstr.find('?stopUdp')==0:
-            udpFlag.value=0
+            pwm.stop()
+            GPIO.cleanup()
+            if duojiProcess and duojiProcess.is_alive():
+                
+                duojiProcess.terminate()
+            duojiProcess = mp.Process(target=setDirection,args=(rotateAngle,rotateRate))
+            duojiProcess.start()
         else:
-            if changeDirectionstr.find('?d')==0:               
+            if duojiProcess and duojiProcess.is_alive():
+                duojiProcess.terminate()
+            if changeDirectionstr.find('?d')==0:
+                print('changeFlag')
+                udpFlag.value = 1
                 directionValue = float(changeDirectionstr[2:])
-                duoji.changeDirection(directionValue)
+                duty = delta/360 * directionValue + zero_dutyCycle
+                pwm.ChangeDutyCycle(duty)
             else:
-                udpFlag.value=0
-            
+                #udpFlag.value=0
+                print('else')
+
+
+
 def changeCamera():
     s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
     s.bind(('0.0.0.0',8888))
     print('bind on 8888')
+    cP_SERVO = 11
+    cfPWM = 50
+
+    czero_dutyCycle = 2.5#*0.64
+    cmiddle_dutyCycle = 7.5#*0.64
+    cright_dutyCycle = 12.5#*0.64
+    cdelta = cright_dutyCycle - czero_dutyCycle
+    GPIO.setmode(GPIO.BOARD)
+    GPIO.setup(cP_SERVO, GPIO.OUT)
+    GPIO.setwarnings(False)
+    cpwm = GPIO.PWM(cP_SERVO, cfPWM)
+    cpwm.start(czero_dutyCycle)
+    #time.sleep(2)
+    #changeDirection(120)
     while True:
+        print(udpFlag.value)
         chdirection,addr = s.recvfrom(1024)
         changeDirectionstr = chdirection.decode()
-        print('changeDirectionstr',changeDirectionstr)
-        if changeDirectionstr.find('?'):
-            directionValue=float(changeDirectionstr[2:])
-            camera.changeDirection(directionValue)
+        #print('changeDirectionstr',changeDirectionstr)
+        if changeDirectionstr.find('?')==0:
+            directionValue = float(changeDirectionstr[2:])
+            #print('directionValue',directionValue)
+            changeDuty = cdelta/180 * directionValue + czero_dutyCycle
+            #print('duty',changeDuty)
+            cpwm.ChangeDutyCycle(changeDuty)
+            #changeDirection(directionValue)
 
 def main():
+    duojiProcess=None
 #    print('enter main')
     global rotateAngle
     global rotateRate
@@ -427,6 +508,10 @@ def main():
             
 
 if __name__=="__main__":
+    
+    
+    
+    directionValue = mp.Value('f',0)
     udpFlag = mp.Value('i',0)
     collectRate = mp.Value('f',30)
     rotateAngle = mp.Value('f',0)
@@ -453,21 +538,23 @@ if __name__=="__main__":
     readProcess = mp.Process(target=readData,args=(collectRate,))
     readProcess.daemon = True
     readProcess.start()
-
-    duojiProcess = mp.Process(target=duoji.setDirection,args=(rotateAngle,rotateRate,udpFlag))
-    duojiProcess.daemon = True
-    duojiProcess.start()
+    
+    #Duoji = duoji()
+    
+    #duojiProcess = mp.Process(target=duoji.setDirection,args=(Duoji,rotateAngle,rotateRate,udpFlag))
+    #duojiProcess.daemon = True
+    #duojiProcess.start()
     
     takePictureProcess = mp.Process(target=takePicture,args=(rotateRate,))
     takePictureProcess.daemon = True
     takePictureProcess.start()
     
-    udpProcess = mp.Process(target=udpListener,args=(udpFlag,))
-    #udpProcess.daemon = True
+    udpProcess = mp.Process(target=udpListener,args=(rotateAngle,rotateRate))
+    udpProcess.daemon = True
     udpProcess.start()
     
     chCameraProcess = mp.Process(target=changeCamera,args=())
-    #chCameraProcess.daemon = True
+    chCameraProcess.daemon = True
     chCameraProcess.start()
 
     main()
